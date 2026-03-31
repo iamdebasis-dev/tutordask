@@ -1,0 +1,287 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  TUTOR
+}
+
+enum CourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  CANCELLED
+}
+
+enum CourseType {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum Level {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  ALL
+}
+
+enum PricingMode {
+  FREE
+  PAID
+  DEMO
+}
+
+enum EnrollmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+}
+
+model User {
+  id       String @id @default(cuid())
+  name     String
+  email    String @unique
+  password String
+  role     Role   @default(STUDENT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  courses       Course[]     @relation("TutorCourses")
+  enrollments   Enrollment[]
+  payments      Payment[]
+  attendance    Attendance[]
+  quizResults   QuizResult[]
+  messagesSent  Message[]    @relation("Sender")
+  messagesRecv  Message[]    @relation("Receiver")
+  emailVerified Boolean      @default(false)
+  image         String?
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("user")
+}
+
+model Course {
+  id       String     @id @default(cuid())
+  title    String
+  subject  String
+  type     CourseType
+  level    Level
+  image    String?
+  language String
+
+  startDate   DateTime
+  endDate     DateTime
+  description String?
+  sFree       Boolean  @default(false)
+
+  status CourseStatus @default(DRAFT)
+
+  pricingMode PricingMode @default(FREE)
+  amount      Float       @default(0)
+
+  tutorId String
+  tutor   User   @relation("TutorCourses", fields: [tutorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  enrollments Enrollment[]
+  sessions    Session[]
+  quizzes     Quiz[]
+  payments    Payment[]
+}
+
+model Enrollment {
+  id       String           @id @default(cuid())
+  userId   String
+  courseId String
+  status   EnrollmentStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
+
+  payment Payment?
+
+  @@unique([userId, courseId])
+}
+
+model Session {
+  id          String        @id @default(cuid())
+  courseId    String
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  status      SessionStatus @default(SCHEDULED)
+  meetingLink String?
+
+  createdAt DateTime @default(now())
+
+  course     Course       @relation(fields: [courseId], references: [id])
+  attendance Attendance[]
+  expiresAt  DateTime
+  token      String
+  updatedAt  DateTime     @updatedAt
+  ipAddress  String?
+  userAgent  String?
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  userId    String
+  sessionId String
+  status    AttendanceStatus
+  joinTime  DateTime?
+  leaveTime DateTime?
+
+  user    User    @relation(fields: [userId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
+
+  @@unique([userId, sessionId])
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  userId       String
+  courseId     String
+  enrollmentId String        @unique
+  amount       Int
+  status       PaymentStatus
+  razorpayId   String?
+
+  createdAt DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id])
+  course     Course     @relation(fields: [courseId], references: [id])
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id])
+}
+
+model Quiz {
+  id           String  @id @default(cuid())
+  courseId     String
+  title        String
+  description  String
+  totalMarks   Int
+  passingMarks Int
+  timeLimit    Int?
+  isPublished  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  course    Course       @relation(fields: [courseId], references: [id])
+  questions Question[]
+  results   QuizResult[]
+}
+
+model Question {
+  id       String @id @default(cuid())
+  quizId   String
+  question String
+  type     String
+  options  Json?
+  answer   String
+  marks    Int
+
+  quiz Quiz @relation(fields: [quizId], references: [id])
+}
+
+model QuizResult {
+  id      String @id @default(cuid())
+  userId  String
+  quizId  String
+  score   Int
+  attempt Int
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  quiz Quiz @relation(fields: [quizId], references: [id])
+}
+
+model Message {
+  id         String  @id @default(cuid())
+  senderId   String
+  receiverId String?
+  courseId   String?
+  content    String
+
+  createdAt DateTime @default(now())
+
+  sender   User  @relation("Sender", fields: [senderId], references: [id])
+  receiver User? @relation("Receiver", fields: [receiverId], references: [id])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
